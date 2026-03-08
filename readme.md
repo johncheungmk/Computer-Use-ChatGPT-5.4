@@ -10,6 +10,12 @@ This project provides a simple **Tkinter GUI** where you can enter a task such a
 
 The app captures the screen, asks GPT-5.4 for the **next UI action**, executes **one action at a time**, captures a new screenshot, and repeats until the task is complete.
 
+## Demo video
+
+Watch the demo on YouTube:
+
+[Windows Computer Use Agent Demo](https://youtu.be/88E1xBFlvbc)
+
 ## Features
 
 - OpenAI **GPT-5.4** + Responses API `computer` tool
@@ -22,8 +28,6 @@ The app captures the screen, asks GPT-5.4 for the **next UI action**, executes *
   - re-checks the UI after every action
 - **Final verification**
   - before reporting success, the app checks whether the goal is really complete
-- **Optional minimize during run**
-  - helps the model see the real desktop instead of the controller window
 - **Optional one-time confirmation at start**
   - avoids step-by-step popup approvals that break focus
 - **Status bar + progress indicator**
