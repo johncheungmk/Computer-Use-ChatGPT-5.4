@@ -217,22 +217,13 @@ class WindowsComputerHarness:
 # Agent runner
 # ============================================================
 class AgentRunner:
-    def __init__(
-        self,
-        ui_logger,
-        on_done,
-        before_capture=None,
-        after_done=None,
-        set_status=None,
-    ):
+    def __init__(self, ui_logger, on_done, set_status=None):
         if not OPENAI_API_KEY:
             raise ValueError("Please set OPENAI_API_KEY")
 
         self.client = OpenAI(api_key=OPENAI_API_KEY)
         self.ui_logger = ui_logger
         self.on_done = on_done
-        self.before_capture = before_capture
-        self.after_done = after_done
         self.set_status = set_status
         self.stop_requested = False
 
@@ -350,8 +341,6 @@ class AgentRunner:
 
             for step_index in range(1, MAX_STEPS + 1):
                 if self.stop_requested:
-                    if self.after_done:
-                        self.after_done()
                     if self.set_status:
                         self.set_status("Stopped", busy=False)
                     self.on_done("Stopped by user.")
@@ -360,16 +349,12 @@ class AgentRunner:
                 tool_payload, actions = self._get_actions(response)
 
                 if tool_payload is None:
-                    if self.before_capture:
-                        self.before_capture()
                     time.sleep(0.4)
                     screenshot_b64 = harness.capture_screenshot_base64()
                     verify_response = self._final_verify(user_task, screenshot_b64)
 
                     verify_tool_payload, verify_actions = self._get_actions(verify_response)
                     if verify_tool_payload is None:
-                        if self.after_done:
-                            self.after_done()
                         final_text = self._extract_text(verify_response) or self._extract_text(response) or "Task completed."
                         if self.set_status:
                             self.set_status("Task completed", busy=False)
@@ -380,8 +365,6 @@ class AgentRunner:
                     tool_payload, actions = verify_tool_payload, verify_actions
 
                 if not actions:
-                    if self.after_done:
-                        self.after_done()
                     if self.set_status:
                         self.set_status("No actions returned", busy=False)
                     self.on_done("No actions returned.")
@@ -401,9 +384,6 @@ class AgentRunner:
                     if self.set_status:
                         self.set_status(f"Executing step {step_index}: {action_type}", busy=True)
 
-                if self.before_capture:
-                    self.before_capture()
-
                 harness.handle_one_action(next_action)
 
                 time.sleep(0.4)
@@ -421,21 +401,15 @@ class AgentRunner:
                 if self.set_status:
                     self.set_status(f"Received updated plan after step {step_index}", busy=True)
 
-            if self.after_done:
-                self.after_done()
             if self.set_status:
                 self.set_status(f"Stopped after MAX_STEPS={MAX_STEPS}", busy=False)
             self.on_done(f"Stopped after MAX_STEPS={MAX_STEPS}.")
 
         except pyautogui.FailSafeException:
-            if self.after_done:
-                self.after_done()
             if self.set_status:
                 self.set_status("Emergency stop triggered", busy=False)
             self.on_done("Emergency stop triggered by moving the mouse to the top-left corner.")
         except Exception as e:
-            if self.after_done:
-                self.after_done()
             if self.set_status:
                 self.set_status("Error", busy=False)
             self.on_done(f"Error: {e}")
@@ -461,7 +435,6 @@ class App(tk.Tk):
 
         self.status_var = tk.StringVar(value="Idle")
         self.last_progress_var = tk.StringVar(value="Last update: never")
-        self.minimize_var = tk.BooleanVar(value=True)
         self.require_start_confirm_var = tk.BooleanVar(value=True)
 
         self.busy = False
@@ -484,12 +457,6 @@ class App(tk.Tk):
 
         ttk.Button(row, text="Run", command=self.start_task).pack(side="left")
         ttk.Button(row, text="Stop", command=self.stop_task).pack(side="left", padx=(8, 0))
-
-        ttk.Checkbutton(
-            row,
-            text="Minimize during run",
-            variable=self.minimize_var,
-        ).pack(side="left", padx=(18, 0))
 
         ttk.Checkbutton(
             row,
@@ -557,21 +524,6 @@ class App(tk.Tk):
 
         self.after(1000, _tick)
 
-    def minimize_for_capture(self):
-        def _min():
-            self.iconify()
-            self.update_idletasks()
-
-        self.after(0, _min)
-
-    def restore_after_done(self):
-        def _restore():
-            self.deiconify()
-            self.lift()
-            self.focus_force()
-
-        self.after(0, _restore)
-
     def on_done(self, message: str):
         self.set_status("Finished", busy=False)
         self.append_log(message)
@@ -591,7 +543,6 @@ class App(tk.Tk):
             messagebox.showwarning("Missing task", "Please enter a task.")
             return
 
-        use_minimize = self.minimize_var.get()
         ask_start_confirm = self.require_start_confirm_var.get()
 
         if ask_start_confirm:
@@ -599,7 +550,6 @@ class App(tk.Tk):
                 "Start task?",
                 "The agent will start now and then run automatically without step-by-step approval.\n\n"
                 f"Task:\n{task}\n\n"
-                f"Minimize during run: {'Yes' if use_minimize else 'No'}\n\n"
                 "Continue?"
             )
             if not confirmed:
@@ -610,23 +560,16 @@ class App(tk.Tk):
             self.runner = AgentRunner(
                 self.append_log,
                 self.on_done,
-                before_capture=self.minimize_for_capture if use_minimize else None,
-                after_done=self.restore_after_done if use_minimize else None,
                 set_status=self.set_status,
             )
         except Exception as e:
             messagebox.showerror("Config error", str(e))
             return
 
-        self.set_status(
-            "Worker started (minimize on)" if use_minimize else "Worker started (minimize off)",
-            busy=True,
-        )
+        self.set_status("Worker started", busy=True)
         self.worker = threading.Thread(target=self.runner.run_task, args=(task,), daemon=True)
         self.worker.start()
-        self.append_log(
-            f"Worker started. minimize_during_run={use_minimize}, start_confirmation={ask_start_confirm}"
-        )
+        self.append_log(f"Worker started. start_confirmation={ask_start_confirm}")
 
     def stop_task(self):
         if self.runner:
