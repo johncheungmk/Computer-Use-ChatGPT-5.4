@@ -24,7 +24,7 @@ The app captures the screen, asks GPT-5.4 for the **next UI action**, executes *
   - before reporting success, the app checks whether the goal is really complete
 - **Optional minimize during run**
   - helps the model see the real desktop instead of the controller window
-- **Optional one-time confirmation before start**
+- **Optional one-time confirmation at start**
   - avoids step-by-step popup approvals that break focus
 - **Status bar + progress indicator**
   - shows current stage such as:
